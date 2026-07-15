@@ -3,7 +3,9 @@
  * Keyed by display_name (as returned by OPSMLALL or shown in the UI).
  */
 
-const MODES = {
+import type { SoundModeEntry } from '../types'
+
+const MODES: Record<string, SoundModeEntry> = {
   // ── Direct / Pure ──────────────────────────────────────────────
   'Direct': {
     speakers: 'Front L/R (+ Sub only with multichannel LFE)',
@@ -88,6 +90,12 @@ const MODES = {
     description: 'Dolby Digital Plus decoding with higher bitrate and up to 7.1 channels.',
     bestFor: 'Streaming services (Netflix, Disney+)',
     notes: 'Can carry Atmos metadata for streaming Atmos content.',
+  },
+  'Dolby Audio - Dolby Digital Plus': {
+    speakers: 'Front L/R, Center, Surround L/R, SB L/R, Sub (up to 7.1)',
+    description: 'Dolby Digital Plus decoding. This is the long receiver label for DD+.',
+    bestFor: 'Streaming services (Netflix, Disney+, Prime Video, Apple TV+)',
+    notes: 'Same codec as Dolby Audio - DD+. If shown with +DSUR, Dolby Surround is additionally upmixing it to your speaker layout.',
   },
   'Dolby Audio - TrueHD': {
     speakers: 'Front L/R, Center, Surround L/R, SB L/R, Sub (up to 7.1)',
@@ -205,26 +213,43 @@ const MODES = {
  * Look up mode info by display_name.
  * Handles exact match, uppercase fallback (FALLBACK_MODES), and common aliases.
  */
-const UPPER_MAP = {}
+const UPPER_MAP: Record<string, SoundModeEntry> = {}
 for (const [key, val] of Object.entries(MODES)) {
   UPPER_MAP[key.toUpperCase()] = val
 }
 
 // Extra aliases for FALLBACK_MODES that don't match exactly
-const ALIASES = {
+const ALIASES: Record<string, SoundModeEntry> = {
   'MCH STEREO': MODES['Multi Ch Stereo'],
   'PURE DIRECT': MODES['Pure Direct'],
   'DTS SURROUND': MODES['DTS Surround'],
   'DOLBY SURROUND': MODES['Dolby Surround'],
+  'DOLBY AUDIO-DD+ +DSUR': MODES['Dolby Surround'],
+  'DOLBY AUDIO - DD+ +DSUR': MODES['Dolby Surround'],
+  'DOLBY AUDIO-DD+': MODES['Dolby Audio - DD+'],
+  'DOLBY AUDIO - DD+': MODES['Dolby Audio - DD+'],
+  'DOLBY AUDIO-DOLBY DIGITAL PLUS': MODES['Dolby Audio - Dolby Digital Plus'],
+  'DOLBY AUDIO - DOLBY DIGITAL PLUS': MODES['Dolby Audio - Dolby Digital Plus'],
+  'DOLBY DIGITAL PLUS': MODES['Dolby Digital Plus'],
   'DOLBY DIGITAL': MODES['Dolby Digital'],
   'DOLBY ATMOS': MODES['Dolby Atmos'],
 }
 
-export function getModeInfo(displayName) {
+function normalizeModeKey(displayName: string | null | undefined): string {
+  return (displayName || '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .replace(/\s*-\s*/g, ' - ')
+    .trim()
+}
+
+export function getModeInfo(displayName: string | null | undefined): SoundModeEntry | null {
   if (!displayName) return null
+  const normalized = normalizeModeKey(displayName)
   return MODES[displayName]
     || UPPER_MAP[displayName.toUpperCase()]
     || ALIASES[displayName.toUpperCase()]
+    || ALIASES[normalized]
     || null
 }
 
