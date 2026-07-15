@@ -3,7 +3,9 @@
  * accent:    main highlight color (buttons, sliders, active states)
  * accentDim: darker variant (gradient end, thumb)
  */
-export const THEMES = {
+import type { Theme, ThemeName } from './types'
+
+export const THEMES: Record<ThemeName, Theme> = {
   gold:   { label: 'Gold',   accent: '#C5A55A', accentDim: '#a08840' },
   blue:   { label: 'Blue',   accent: '#3B82F6', accentDim: '#1d4ed8' },
   red:    { label: 'Red',    accent: '#EF4444', accentDim: '#b91c1c' },
@@ -17,17 +19,21 @@ export const THEMES = {
 
 const STORAGE_KEY = 'denon-dashboard-theme'
 
-/** Get the active theme name: localStorage > serverDefault > 'gold' */
-export function getTheme(serverDefault) {
+function isThemeName(name: string | null | undefined): name is ThemeName {
+  return !!name && Object.prototype.hasOwnProperty.call(THEMES, name)
+}
+
+/** Get the active theme name: server-persisted default > local fallback > 'gold'. */
+export function getTheme(serverDefault?: string | null): ThemeName {
+  if (isThemeName(serverDefault)) return serverDefault
   const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored && THEMES[stored]) return stored
-  if (serverDefault && THEMES[serverDefault]) return serverDefault
+  if (isThemeName(stored)) return stored
   return 'gold'
 }
 
 /** Apply a theme by name and persist to localStorage. */
-export function applyTheme(name) {
-  const key = THEMES[name] ? name : 'gold'
+export function applyTheme(name: string | null | undefined): ThemeName {
+  const key: ThemeName = isThemeName(name) ? name : 'gold'
   const t = THEMES[key]
   const root = document.documentElement
   root.style.setProperty('--accent',     t.accent)
@@ -36,7 +42,7 @@ export function applyTheme(name) {
 }
 
 /** Set theme, apply it, and persist to localStorage. */
-export function setTheme(name) {
+export function setTheme(name: string | null | undefined): ThemeName {
   const applied = applyTheme(name)
   localStorage.setItem(STORAGE_KEY, applied)
   return applied
