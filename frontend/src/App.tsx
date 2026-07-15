@@ -4,6 +4,8 @@ import { useWebSocket } from './hooks/useWebSocket'
 import ReceiverSetup from './components/ReceiverSetup'
 import { useDeviceInfo } from './hooks/useDeviceInfo'
 import { useApi } from './hooks/useApi'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { useForegroundEffects } from './hooks/useForegroundEffects'
 import StatusBar from './components/StatusBar'
 import PowerControl from './components/PowerControl'
 import VolumeControl from './components/VolumeControl'
@@ -15,9 +17,17 @@ import SubwooferLevel from './components/SubwooferLevel'
 import AudioSettings from './components/AudioSettings'
 import MediaControls from './components/MediaControls'
 import Zone2Controls from './components/Zone2Controls'
+import CacheReset from './components/CacheReset'
+import AmbientBackground from './experience/AmbientBackground'
+import SeasonalEffects from './experience/SeasonalEffects'
+import ShortcutOverlay from './experience/ShortcutOverlay'
+import type { Zone, ThemeName, UiEffects, RadioFavorite } from './types'
+import type { NightModeConfigState } from './components/NightModeModal'
+
+type Section = 'controls' | 'speakers' | 'audio'
 
 // Fallback channel names if API hasn't loaded yet
-const FALLBACK_CHANNEL_NAMES = {
+const FALLBACK_CHANNEL_NAMES: Record<string, string> = {
   FL: 'Front L', FR: 'Front R', C: 'Center', SW: 'Subwoofer',
   SW2: 'Sub 2', SL: 'Surround L', SR: 'Surround R',
   SBL: 'SB Left', SBR: 'SB Right', SB: 'SB',
@@ -37,19 +47,32 @@ const MemoStatusBar = memo(StatusBar)
 const MemoMediaControls = memo(MediaControls)
 
 export default function App() {
-  const { state, wsConnected, sendCommand } = useWebSocket()
-  const { info } = useDeviceInfo()
+  const { state, wsConnected, wsConnecting, sendCommand } = useWebSocket()
+  const { info, reload: reloadDeviceInfo } = useDeviceInfo()
   const { post } = useApi()
-  const [zone, setZone] = useState('main')
-  const [activeSection, setActiveSection] = useState('controls')
-  const [currentTheme, setCurrentTheme] = useState('gold')
+  const [zone, setZone] = useState<Zone>('main')
+  useForegroundEffects()
+  useKeyboardShortcuts({ state, post, sendCommand, zone, setZone })
+  const [activeSection, setActiveSection] = useState<Section>('controls')
+  const [currentTheme, setCurrentTheme] = useState<ThemeName>('gold')
 
-  // Apply theme whenever device info loads, respecting localStorage override
+  // Apply theme whenever device info loads. Server-persisted theme is the default;
+  // localStorage remains a browser-local override for users who want it.
   useEffect(() => {
     const t = getTheme(info?.theme)
     applyTheme(t)
     setCurrentTheme(t)
   }, [info?.theme])
+
+  // Live theme sync: the backend includes the persisted theme in every WebSocket
+  // state push and re-broadcasts on save, so a theme change on one device applies
+  // on all connected devices without a reload.
+  useEffect(() => {
+    if (!state?.theme) return
+    const t = getTheme(state.theme)
+    applyTheme(t)
+    setCurrentTheme(t)
+  }, [state?.theme])
 
   // Loading — waiting for first WebSocket message
   if (!state) {
@@ -58,6 +81,7 @@ export default function App() {
         <div className="text-center">
           <div className="w-14 h-14 border-4 border-denon-gold/30 border-t-denon-gold rounded-full animate-spin mx-auto mb-4" />
           <p className="text-denon-muted text-sm">Connecting…</p>
+          <p className="text-denon-muted/50 text-xs mt-2">If this stays here, hard refresh once to clear old cached app files.</p>
         </div>
       </div>
     )
@@ -90,7 +114,7 @@ export default function App() {
   // Discovery finished but no receiver found — show setup screen
   if (!state.connected) {
     const reason = info?.receiver_ip === '0.0.0.0' ? 'no_host' : 'connect_failed'
-    return <ReceiverSetup discovering={info?.discovering} setReceiverIp={setManualIp} onConnect={connectToIp} currentTheme={currentTheme} onThemeChange={setCurrentTheme} />
+    return <ReceiverSetup reason={reason} onConnect={() => window.location.reload()} currentTheme={currentTheme} onThemeChange={setCurrentTheme} />
   }
 
   // Connected
@@ -101,28 +125,76 @@ export default function App() {
     ? info.channel_names
     : FALLBACK_CHANNEL_NAMES
   const sourceNameMap = info?.source_name_map || {}
+  const sourceNameOverrides = info?.source_name_overrides || {}
   const configuredSources = info?.sources || []
+  const radioFavorites = info?.radio_favorites || []
+  const uiEffects: Partial<UiEffects> = info?.ui_effects || {}
 
-  const mainSections = [
+  const saveNightModeConfig = async (config: NightModeConfigState): Promise<void> => {
+    const res = await fetch('/api/v1/night-mode/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    })
+    if (res.ok) reloadDeviceInfo()
+    else console.warn('Night mode config save failed', await res.text().catch(() => res.statusText))
+  }
+
+  const saveRadioFavorite = async (favorite: RadioFavorite, enabled: boolean): Promise<void> => {
+    const res = enabled
+      ? await fetch('/api/v1/media/radio/favorites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(favorite),
+        })
+      : await fetch(`/api/v1/media/radio/favorites/${encodeURIComponent(favorite.mid)}`, { method: 'DELETE' })
+    if (res.ok) reloadDeviceInfo()
+    else console.warn('Radio favorite update failed', await res.text().catch(() => res.statusText))
+  }
+
+  const renameSource = async (code: string, name: string | null): Promise<void> => {
+    const res = name == null
+      ? await fetch(`/api/v1/source-names/${encodeURIComponent(code)}`, { method: 'DELETE' })
+      : await fetch(`/api/v1/source-names/${encodeURIComponent(code)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        })
+    if (res.ok) reloadDeviceInfo()
+    else console.warn('Source rename failed', await res.text().catch(() => res.statusText))
+  }
+
+  const mainSections: { id: Section; label: string }[] = [
     { id: 'controls', label: 'Controls' },
     { id: 'speakers', label: 'Speakers' },
     { id: 'audio', label: 'Audio / EQ' },
   ]
 
   return (
-    <div className="max-w-2xl mx-auto px-4 pb-8 min-h-screen">
+    <>
+    {uiEffects.ambient_background !== false && (
+      <AmbientBackground state={state} intensity={uiEffects.ambient_intensity ?? 1} />
+    )}
+    <SeasonalEffects mode={uiEffects.seasonal_effects || 'auto'} />
+    {uiEffects.shortcut_overlay !== false && <ShortcutOverlay />}
+    <CacheReset />
+    <div className={`relative z-10 max-w-2xl mx-auto px-4 pb-24 sm:pb-8 min-h-screen ${uiEffects.card_animations === false ? 'no-card-animations' : ''}`}>
       {/* Header + Health */}
       <MemoStatusBar
         deviceName={deviceName}
         state={state}
         wsConnected={wsConnected}
+        wsConnecting={wsConnecting}
         receiverIp={info?.receiver_ip}
+        info={info}
+        post={post}
         currentTheme={currentTheme}
         onThemeChange={setCurrentTheme}
+        onNightModeConfigChange={saveNightModeConfig}
       />
 
-      {/* Zone Selector */}
-      <div className="flex gap-0 mb-5 bg-denon-card/50 rounded-2xl p-1.5 border border-denon-border/50 backdrop-blur-sm">
+      {/* Zone Selector (desktop; mobile uses the bottom nav) */}
+      <div className="hidden sm:flex gap-0 mb-5 bg-denon-card/50 rounded-2xl p-1.5 border border-denon-border/50 backdrop-blur-sm">
         <button
           onClick={() => setZone('main')}
           className={`flex-1 py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-200 ${
@@ -154,8 +226,8 @@ export default function App() {
       {/* Main Zone */}
       {zone === 'main' && (
         <>
-          {/* Section tabs */}
-          <div className="flex gap-1 mb-4">
+          {/* Section tabs (desktop; mobile uses the bottom nav) */}
+          <div className="hidden sm:flex gap-1 mb-4">
             {mainSections.map(s => (
               <button
                 key={s.id}
@@ -182,6 +254,10 @@ export default function App() {
                   sendCommand={sendCommand}
                   sources={configuredSources}
                   sourceNameMap={sourceNameMap}
+                  sourceNameOverrides={sourceNameOverrides}
+                  radioFavorites={radioFavorites}
+                  onRenameSource={renameSource}
+                  onRadioFavoriteChange={saveRadioFavorite}
                 />
                 <SurroundMode state={state} sendCommand={sendCommand} />
               </>
@@ -219,10 +295,65 @@ export default function App() {
             post={post}
             sources={configuredSources}
             sourceNameMap={sourceNameMap}
+            sourceNameOverrides={sourceNameOverrides}
+            radioFavorites={radioFavorites}
+            onRenameSource={renameSource}
+            onRadioFavoriteChange={saveRadioFavorite}
             zoneName={z2Name}
           />
         </div>
       )}
     </div>
+
+    {/* Mobile bottom navigation — thumb-reachable zone + section tabs */}
+    <nav
+      className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-denon-card/95 backdrop-blur-xl border-t border-denon-border/60"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
+      <div className="max-w-2xl mx-auto px-3 pt-2 pb-2 space-y-2">
+        {/* Zone toggle */}
+        <div className="flex gap-1">
+          <button
+            onClick={() => setZone('main')}
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
+              zone === 'main'
+                ? 'bg-gradient-to-r from-denon-gold to-amber-500 text-denon-dark'
+                : 'text-denon-muted hover:text-denon-text'
+            }`}
+          >
+            {zoneName}
+          </button>
+          <button
+            onClick={() => setZone('zone2')}
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
+              zone === 'zone2'
+                ? 'bg-gradient-to-r from-denon-gold to-amber-500 text-denon-dark'
+                : 'text-denon-muted hover:text-denon-text'
+            }`}
+          >
+            {z2Name}
+          </button>
+        </div>
+        {/* Section tabs (main zone only) */}
+        {zone === 'main' && (
+          <div className="flex gap-1">
+            {mainSections.map(s => (
+              <button
+                key={s.id}
+                onClick={() => setActiveSection(s.id)}
+                className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                  activeSection === s.id
+                    ? 'bg-denon-surface text-denon-gold border border-denon-gold/30'
+                    : 'text-denon-muted hover:text-denon-text'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </nav>
+    </>
   )
 }
