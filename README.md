@@ -1,6 +1,6 @@
 # Denon AVR Dashboard
 
-<<Added ARM64 support and fixed rendering>>
+## Added ARM64 support and fixed rendering ##
 
 A modern, real-time web dashboard for controlling Denon/Marantz AVR receivers. Built with React + FastAPI, communicates via **telnet** (port 23) and **HEOS CLI** (port 1255) — no dependency on the receiver's unreliable built-in web interface.
 
