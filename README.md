@@ -2,7 +2,7 @@
 
 A modern, real-time web dashboard for controlling Denon/Marantz AVR receivers. Built with React + FastAPI, communicates via **telnet** (port 23) and **HEOS CLI** (port 1255) — no dependency on the receiver's unreliable built-in web interface.
 
-[![Build](https://github.com/OxygenLack/denon-dashboard/actions/workflows/docker.yml/badge.svg)](https://github.com/OxygenLack/denon-dashboard/actions/workflows/docker.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) ![React 19](https://img.shields.io/badge/React-19-61dafb) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688) ![Docker](https://img.shields.io/badge/Docker-ready-2496ed) [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-integration-41BDF5?logo=homeassistant&logoColor=white)](https://github.com/OxygenLack/denon-dashboard-ha)
+[![Build](https://github.com/flash1228/denon-dashboard/actions/workflows/docker.yml/badge.svg)](https://github.com/flash1228/denon-dashboard/actions/workflows/docker.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) ![React 19](https://img.shields.io/badge/React-19-61dafb) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688) ![Docker](https://img.shields.io/badge/Docker-ready-2496ed) [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-integration-41BDF5?logo=homeassistant&logoColor=white)](https://github.com/OxygenLack/denon-dashboard-ha)
 
 > **Disclaimer:** This is an unofficial, community-developed project. Not affiliated with or endorsed by Denon, Marantz, or Sound United/Masimo. All product names and trademarks are the property of their respective owners.
 
@@ -62,7 +62,7 @@ Browser  ◄──WebSocket──►  FastAPI Backend  ──telnet (23)──�
 ```yaml
 services:
   denon-dashboard:
-    image: ghcr.io/flash1228/Denon-Marantz-AVR-Dashboard-ARM64:latest
+    image: ghcr.io/flash1228/Denon-Marantz-AVR-Dashboard:latest
     container_name: denon-dashboard
     restart: unless-stopped
     network_mode: host        # required for SSDP auto-discovery
@@ -88,7 +88,7 @@ If you use Traefik or can't use `network_mode: host`, set the IP explicitly:
 ```yaml
 services:
   denon-dashboard:
-    image: ghcr.io/flash1228/Denon-Marantz-AVR-Dashboard-ARM64:latest
+    image: ghcr.io/flash1228/Denon-Marantz-AVR-Dashboard:latest
     container_name: denon-dashboard
     restart: unless-stopped
     ports:
@@ -312,7 +312,7 @@ Install via [HACS](https://hacs.xyz/) by adding `https://github.com/OxygenLack/d
 ## Roadmap
 
 ### Known Limitations
-- **HEOS source switching** - the receiver maps all HEOS sources (Bluetooth, Spotify, Internet Radio, etc.) to `SINET` internally. Switching between them via telnet is not possible. The dashboard detects and highlights the active service correctly, but the source buttons can't force-switch between HEOS services ([#2](https://github.com/OxygenLack/denon-dashboard/issues/2))
+- **HEOS source switching** - the receiver maps all HEOS sources (Bluetooth, Spotify, Internet Radio, etc.) to `SINET` internally. Switching between them via telnet is not possible. The dashboard detects and highlights the active service correctly, but the source buttons can't force-switch between HEOS services ([#2](https://github.com/flash1228/denon-dashboard/issues/2))
 
 ### Planned
 - **Night mode / sub presets** — quick-switch subwoofer profiles (e.g., "Movie" vs "Night" with reduced sub level), or a time-based automatic night mode ([requested](https://reddit.com/r/hometheater/comments/1syh2mn/i_got_tired_of_denons_broken_web_ui_so_i_built_my/oiwhfpt/))
@@ -322,7 +322,7 @@ Install via [HACS](https://hacs.xyz/) by adding `https://github.com/OxygenLack/d
 - **Audyssey preset switching** (Preset 1 / Preset 2)
 - Feature parity with the original Denon/Marantz web UI
 
-**Want more?** Open an [issue](https://github.com/OxygenLack/denon-dashboard/issues) or submit a PR — contributions welcome.
+**Want more?** Open an [issue](https://github.com/flash1228/denon-dashboard/issues) or submit a PR — contributions welcome.
 
 ## License
 
