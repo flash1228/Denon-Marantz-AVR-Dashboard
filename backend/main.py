@@ -229,7 +229,7 @@ async def websocket_endpoint(ws: WebSocket):
                 origin_host = f"{parsed_origin.scheme}://{parsed_origin.netloc}"
                 allowed = origin_host in cors_origins
             except Exception:
-                pass
+                _LOGGER.debug("Invalid origin format: %s", origin)
         else:
             allowed = True  # allow empty origin (non-browser clients)
             

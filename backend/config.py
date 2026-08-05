@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import json
+import logging
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
+_LOGGER = logging.getLogger("config")
 
 
 class Settings(BaseSettings):
@@ -33,6 +37,25 @@ class Settings(BaseSettings):
     # Local timezone and time display format for schedules
     timezone: str = "Europe/Berlin"
     time_format: str = "auto"  # auto, 24h, 12h
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, v: str) -> str:
+        from zoneinfo import ZoneInfo, available_timezones
+        try:
+            ZoneInfo(v)
+            return v
+        except Exception:
+            _LOGGER.warning("Invalid timezone '%s', falling back to Europe/Berlin", v)
+            return "Europe/Berlin"
+
+    @field_validator("port")
+    @classmethod
+    def validate_port(cls, v: int) -> int:
+        if v < 1 or v > 65535:
+            _LOGGER.warning("Invalid port %d, defaulting to 8080", v)
+            return 8080
+        return v
 
     # Optional UI experience effects
     ui_ambient_background: bool = True

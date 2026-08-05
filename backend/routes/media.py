@@ -95,7 +95,11 @@ async def _cache_browse(state: AppState, cid: str | None = None) -> dict:
             return cached
     if not state.heos:
         return {"items": [], "count": 0, "returned": 0, "_debug": "no_heos"}
-    result = await state.heos.browse_source(TUNEIN_SID, cid)
+    try:
+        result = await state.heos.browse_source(TUNEIN_SID, cid)
+    except Exception as exc:
+        _LOGGER.error("HEOS browse error for cid=%s: %s", cid, exc)
+        return {"items": [], "count": 0, "returned": 0, "_debug": f"error_{exc}"}
     if result.get("items"):
         if len(_BROWSE_CACHE) >= _MAX_CACHE_ITEMS:
             oldest_key = min(_BROWSE_CACHE.keys(), key=lambda k: _BROWSE_CACHE[k][0])
